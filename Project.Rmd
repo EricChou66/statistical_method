@@ -1,0 +1,989 @@
+---
+title: "Statistic of token storjcoin"
+author: "Yen-Ting Chou"
+date: "10/9/2018"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(plyr)
+library(fitdistrplus)
+library(anytime)
+library(data.table)
+```
+
+#Project 1
+***
+#### Primary Token: 13
+#### The 13th largest token: storjcoin 
+***
+- Load data into dataframe
+```{r}
+data <- read.table("./Ethereum token graphs/networkstorjTX.txt", col.names = c("fromNode", "toNode", "unixTime", "tokenAmount"))
+
+price <- read.table("./tokenPrices/storj", skip = 1, col.names = c("Date", "Open", "High", "low", "Close", "Volumn", "MarketCap"))
+```
+***
+### Data Preprocessing
+The total supply of storj: **424,999,998** (Data comes from coinmarketcap)  
+The Decimal of storj: **8**    
+The total amount of tokens : $$424,999,998 * 10^{8}$$  
+Those transactions which anount is greater than total supply should be remove  
+The following table shows the result of which user is trying to make a transaction which amount is greater than the total amount of token
+```{r}
+supply <- 424999998
+decimal <- 8
+total_token <- supply*10^decimal
+outlier <- subset(data, data$tokenAmount >= total_token)
+outlier_cnt <- count(outlier, 'fromNode')
+#outlier_cnt
+```
+***
+### Question 1: Find the distribution of how many times a user buys or sells a token
++ Considering those buyer who didn't sell and those seller who didn't buy
+```{r}
+normal_data <- subset(data, data$tokenAmount < total_token)
+sell_and_buy <- intersect(normal_data$fromNode, normal_data$toNode)
+all_sell <- count(normal_data, 'fromNode')
+all_buy <- count(normal_data, 'toNode')
+only_sell <- setdiff(normal_data$fromNode, sell_and_buy)
+only_sell <- cbind(only_sell, fill=0)
+only_buy <- setdiff(normal_data$toNode, sell_and_buy)
+only_buy <- cbind(only_buy, fill=0)
+colnames(only_buy)<- c('fromNode', 'freq')
+colnames(only_sell)<- c('toNode', 'freq')
+sell <- rbind(all_sell, only_buy)
+buy <- rbind(all_buy, only_sell)
+colnames(sell) <- c('seller', 'transactions')
+sell_freq <- count(sell, 'transactions')
+colnames(buy) <- c('buyer', 'transactions')
+buy_freq <- count(buy, 'transactions')
+```
+
+#### Seller
++ The plot of seller's transcractions frequency
+```{r}
+qsell <- qplot(sell_freq$transactions, data = sell_freq,
+               geom = "histogram",
+               binwidth = 500,
+               main = "Frequency of seller's tranactions",
+               xlab = "transactions",
+               fill=I("blue"))
+qsell
+```
+
++ Look at the seller transactions frequency stats
+```{r}
+#summary(sell_freq)
+#head(sell_freq)
+#tail(sell_freq)
+```
+
++ If we remove frequency 0, and the 166342 transactions data
+```{r}
+new_sell_freq <- subset(sell_freq, transactions > 0 & transactions < 166342)
+#summary(new_sell_freq)
+#head(new_sell_freq)
+#tail(new_sell_freq)
+qplot(new_sell_freq$transactions, data = new_sell_freq,
+      geom = "histogram",
+      binwidth = 200,
+      xlim = c(0, 25000), 
+      main = "Frequency of seller's tranactions",
+      xlab = "transactions",
+      fill=I("blue"))
+```
+
+#### Trying to fit 
++ First, use Cullen and Fury graph to see which distribution fit the most
++ Lognormal distribution can not fit the data which has zero inside
++ Compare the gamma, normal, poison and exponential distribution
+
+```{r}
+plotdist(sell_freq$transaction, histo = TRUE, demp = TRUE)
+descdist(sell_freq$transaction, discrete=FALSE)
+```
+
++ Gamma distribution
+```{r}
+sell.fit.gamma <- fitdist(sell_freq$transactions, distr = "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+#plot(sell.fit.gamma)
+```
+
++ Normal distribution
+```{r}
+sell.fit.norm <- fitdist(sell_freq$transactions, distr = "norm", method = "mle")
+#plot(sell.fit.norm)
+```
+
++ Poison distribution
+```{r}
+sell.fit.pois <- fitdist(sell_freq$transactions, distr = "pois", method = "mle")
+#plot(sell.fit.pois)
+```
+
++ Exponential distribution
+```{r}
+sell.fit.exp <- fitdist(sell_freq$transactions, distr = "exp", method = "mme")
+#plot(sell.fit.exp)
+```
+
++ Comparison
+```{r}
+par(mfrow=c(2,2))
+plot.legend <- c("Gamma", "Normal", "Poison", "Exponential")
+denscomp(list(sell.fit.gamma, sell.fit.norm, sell.fit.pois, sell.fit.exp), legendtext = plot.legend)
+cdfcomp (list(sell.fit.gamma, sell.fit.norm, sell.fit.pois, sell.fit.exp), legendtext = plot.legend)
+qqcomp  (list(sell.fit.gamma, sell.fit.norm, sell.fit.pois, sell.fit.exp), legendtext = plot.legend)
+```
+
++ Trying to fit without the outliers
+```{r}
+plotdist(new_sell_freq$transaction, histo = TRUE, demp = TRUE)
+descdist(new_sell_freq$transaction, discrete=FALSE)
+```
+
++ Gamma distribution
+```{r}
+nsell.fit.gamma <- fitdist(new_sell_freq$transactions, distr = "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+#plot(nsell.fit.gamma)
+```
+
++ Normal distribution
+```{r}
+nsell.fit.norm <- fitdist(new_sell_freq$transactions, distr = "norm", method = "mle")
+#plot(nsell.fit.norm)
+```
+
++ Lognormal distribution
+```{r}
+nsell.fit.lnorm <- fitdist(new_sell_freq$transactions, distr = "lnorm", method = "mle")
+#plot(nsell.fit.lnorm)
+```
+
++ Poison distribution
+```{r}
+nsell.fit.pois <- fitdist(new_sell_freq$transactions, distr = "pois", method = "mle")
+#plot(nsell.fit.pois)
+```
+
++ Exponential distribution
+```{r}
+nsell.fit.exp <- fitdist(new_sell_freq$transactions, distr = "exp", method = "mme")
+#plot(nsell.fit.exp)
+```
+
++ Comparison
+```{r}
+par(mfrow=c(1,2))
+plot.legend <- c("Gamma", "Normal", "Lognormal", "Poison", "Exponential")
+denscomp(list(nsell.fit.gamma, nsell.fit.norm, nsell.fit.norm, 
+              nsell.fit.pois, nsell.fit.exp), legendtext = plot.legend)
+cdfcomp (list(nsell.fit.gamma, nsell.fit.norm, nsell.fit.norm, 
+              nsell.fit.pois, nsell.fit.exp), legendtext = plot.legend)
+qqcomp  (list(nsell.fit.gamma, nsell.fit.norm, nsell.fit.norm, 
+              nsell.fit.pois, nsell.fit.exp), legendtext = plot.legend)
+ppcomp (list(nsell.fit.gamma, nsell.fit.norm, nsell.fit.norm, 
+              nsell.fit.pois, nsell.fit.exp), legendtext = plot.legend)
+```
+
+##### Buyer
++ The plot of buyer's transcractions frequency
+```{r}
+#summary(buy_freq)
+qsell <- qplot(buy_freq$transactions, data = buy_freq,
+               geom = "histogram",
+               binwidth = 50,
+               main = "Frequency of buyer's tranactions",
+               xlab = "transactions",
+               fill=I("blue"))
+qsell
+```
+
++ Look at the buyer transactions frequency stats
+```{r}
+#summary(buy_freq)
+#head(buy_freq)
+#tail(buy_freq)
+```
+
++ If we remove frequency 0, and the 9585, 9992 transactions data
+```{r}
+new_buy_freq <- subset(buy_freq, transactions > 0 & transactions < 9585)
+#summary(new_buy_freq)
+qplot(new_buy_freq$transactions, data = new_buy_freq,
+      geom = "histogram",
+      binwidth = 50,
+      main = "Frequency of buyer's tranactions",
+      xlim = c(0, 4000), 
+      xlab = "transactions",
+      fill=I("blue"))
+```
+
+#### Trying to fit 
++ First, use Cullen and Fury graph to see which distribution fit the most
++ Lognormal distribution can not fit the data which has zero inside
++ Compare the gamma, normal, poison and exponential distribution
+
+```{r}
+plotdist(buy_freq$transaction, histo = TRUE, demp = TRUE)
+descdist(buy_freq$transaction, discrete=FALSE)
+```
+
++ Gamma distribution
+```{r}
+buy.fit.gamma <- fitdist(buy_freq$transactions, distr = "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+#plot(buy.fit.gamma)
+```
+
++ Normal distribution
+```{r}
+buy.fit.norm <- fitdist(buy_freq$transactions, distr = "norm", method = "mle")
+#plot(buy.fit.norm)
+```
+
++ Poison distribution
+```{r}
+buy.fit.pois <- fitdist(buy_freq$transactions, distr = "pois", method = "mle")
+#plot(buy.fit.pois)
+```
+
++ Exponential distribution
+```{r}
+buy.fit.exp <- fitdist(buy_freq$transactions, distr = "exp", method = "mme")
+#plot(buy.fit.exp)
+```
+
++ Comparison
+```{r}
+par(mfrow=c(2,2))
+plot.legend <- c("Gamma", "Normal", "Poison", "Exponential")
+denscomp(list(buy.fit.gamma, buy.fit.norm, buy.fit.pois, buy.fit.exp), legendtext = plot.legend)
+cdfcomp (list(buy.fit.gamma, buy.fit.norm, buy.fit.pois, buy.fit.exp), legendtext = plot.legend)
+qqcomp  (list(buy.fit.gamma, buy.fit.norm, buy.fit.pois, buy.fit.exp), legendtext = plot.legend)
+```
+
++ Trying to fit without the outliers
+```{r}
+plotdist(new_buy_freq$transaction, histo = TRUE, demp = TRUE)
+descdist(new_buy_freq$transaction, discrete=FALSE)
+```
+
++ Gamma distribution
+```{r}
+nbuy.fit.gamma <- fitdist(new_buy_freq$transactions, distr = "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+#plot(nbuy.fit.gamma)
+```
+
++ Normal distribution
+```{r}
+nbuy.fit.norm <- fitdist(new_buy_freq$transactions, distr = "norm", method = "mle")
+#plot(nbuy.fit.norm)
+```
+
++ Lognormal distribution
+```{r}
+nbuy.fit.lnorm <- fitdist(new_buy_freq$transactions, distr = "lnorm", method = "mle")
+#plot(nbuy.fit.lnorm)
+```
+
++ Poison distribution
+```{r}
+nbuy.fit.pois <- fitdist(new_buy_freq$transactions, distr = "pois", method = "mle")
+#plot(nbuy.fit.pois)
+```
+
++ Exponential distribution
+```{r}
+nbuy.fit.exp <- fitdist(new_buy_freq$transactions, distr = "exp", method = "mme")
+#plot(nbuy.fit.exp)
+```
+
++ Comparison
+```{r}
+par(mfrow=c(1,1))
+plot.legend <- c("Gamma", "Normal", "Lognormal", "Poison", "Exponential")
+denscomp(list(nbuy.fit.gamma, nbuy.fit.norm, nbuy.fit.norm, 
+              nbuy.fit.pois, nbuy.fit.exp), legendtext = plot.legend)
+cdfcomp (list(nbuy.fit.gamma, nbuy.fit.norm, nbuy.fit.norm, 
+              nbuy.fit.pois, nbuy.fit.exp), legendtext = plot.legend)
+qqcomp  (list(nbuy.fit.gamma, nbuy.fit.norm, nbuy.fit.norm, 
+              nbuy.fit.pois, nbuy.fit.exp), legendtext = plot.legend, cex=0.7)
+ppcomp (list(nbuy.fit.gamma, nbuy.fit.norm, nbuy.fit.norm, 
+              nbuy.fit.pois, nbuy.fit.exp), legendtext = plot.legend)
+```
+
+#### Conclusion
++ About the Cullen and Frey graph, I reference from [link](http://www.di.fc.ul.pt/~jpn/r/distributions/fitting.html)
++ The graph can help to find a better distribution to fit
++ In the comparison plot, we can tell no matter with outliers or not, the exponential distribution fits data the most
+
+### Question 2: How can we create layers of transactions with increasing amounts?
++ Finding the best value for the number of layers
++ Since there are about 400,000 transactions
++ I decide to seperate the data into around 20,000 data in each layer
++ There are 20 layers
+
++ Convert Unix Timestamp to Date
+```{r}
+normal_data$unixTime <- strftime(anytime::anydate(normal_data$unixTime), format = "%m/%d/%Y")
+```
+
++ Select unique buyers as the feature as each layer
+```{r}
+layer1 <- subset(normal_data, normal_data$tokenAmount < total_token*2.1325*10^(-9))
+layer1_cor <- data.frame(unique(layer1$unixTime))
+colnames(layer1_cor) <- c('Date')
+layer1_cor <- merge(x = layer1_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer1) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer1_cor[,"Unique_Buyer"] <- NA
+for(date in layer1_cor$Date)
+{
+  ubuyer <- subset(layer1, layer1$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer1_cor$Unique_Buyer[layer1_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer2 <- subset(normal_data, total_token*2.1425*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*2.1325*10^(-9))
+layer2_cor <- data.frame(unique(layer2$unixTime))
+colnames(layer2_cor) <- c('Date')
+layer2_cor <- merge(x = layer2_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer2) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer2_cor[,"Unique_Buyer"] <- NA
+for(date in layer2_cor$Date)
+{
+  ubuyer <- subset(layer2, layer2$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer2_cor$Unique_Buyer[layer2_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer3 <- subset(normal_data, total_token*2.21*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*2.1425*10^(-9))
+layer3_cor <- data.frame(unique(layer3$unixTime))
+colnames(layer3_cor) <- c('Date')
+layer3_cor <- merge(x = layer3_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer3) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer3_cor[,"Unique_Buyer"] <- NA
+for(date in layer3_cor$Date)
+{
+  ubuyer <- subset(layer3, layer3$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer3_cor$Unique_Buyer[layer3_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer4 <- subset(normal_data, total_token*2.82*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*2.21*10^(-9))
+layer4_cor <- data.frame(unique(layer4$unixTime))
+colnames(layer4_cor) <- c('Date')
+layer4_cor <- merge(x = layer4_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer4) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer4_cor[,"Unique_Buyer"] <- NA
+for(date in layer4_cor$Date)
+{
+  ubuyer <- subset(layer4, layer4$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer4_cor$Unique_Buyer[layer4_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer5 <- subset(normal_data, total_token*2.8275*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*2.82*10^(-9))
+layer5_cor <- data.frame(unique(layer5$unixTime))
+colnames(layer5_cor) <- c('Date')
+layer5_cor <- merge(x = layer5_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer5) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer5_cor[,"Unique_Buyer"] <- NA
+for(date in layer5_cor$Date)
+{
+  ubuyer <- subset(layer5, layer5$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer5_cor$Unique_Buyer[layer5_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer6 <- subset(normal_data, total_token*2.95*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*2.8275*10^(-9))
+layer6_cor <- data.frame(unique(layer6$unixTime))
+colnames(layer6_cor) <- c('Date')
+layer6_cor <- merge(x = layer6_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer6) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer6_cor[,"Unique_Buyer"] <- NA
+for(date in layer6_cor$Date)
+{
+  ubuyer <- subset(layer6, layer6$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer6_cor$Unique_Buyer[layer6_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer7 <- subset(normal_data, total_token*3.025*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*2.95*10^(-9))
+layer7_cor <- data.frame(unique(layer7$unixTime))
+colnames(layer7_cor) <- c('Date')
+layer7_cor <- merge(x = layer7_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer7) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer7_cor[,"Unique_Buyer"] <- NA
+for(date in layer7_cor$Date)
+{
+  ubuyer <- subset(layer7, layer7$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer7_cor$Unique_Buyer[layer7_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer8 <- subset(normal_data, total_token*3.08*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*3.025*10^(-9))
+layer8_cor <- data.frame(unique(layer8$unixTime))
+colnames(layer8_cor) <- c('Date')
+layer8_cor <- merge(x = layer8_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer8) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer8_cor[,"Unique_Buyer"] <- NA
+for(date in layer8_cor$Date)
+{
+  ubuyer <- subset(layer8, layer8$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer8_cor$Unique_Buyer[layer8_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer9 <- subset(normal_data, total_token*3.17*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*3.08*10^(-9))
+layer9_cor <- data.frame(unique(layer9$unixTime))
+colnames(layer9_cor) <- c('Date')
+layer9_cor <- merge(x = layer9_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer9) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer9_cor[,"Unique_Buyer"] <- NA
+for(date in layer9_cor$Date)
+{
+  ubuyer <- subset(layer9, layer9$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer9_cor$Unique_Buyer[layer9_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer10 <- subset(normal_data, total_token*4.1*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*3.17*10^(-9))
+layer10_cor <- data.frame(unique(layer10$unixTime))
+colnames(layer10_cor) <- c('Date')
+layer10_cor <- merge(x = layer10_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer10) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer10_cor[,"Unique_Buyer"] <- NA
+for(date in layer10_cor$Date)
+{
+  ubuyer <- subset(layer10, layer10$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer10_cor$Unique_Buyer[layer10_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer11 <- subset(normal_data, total_token*5.7*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*4.1*10^(-9))
+layer11_cor <- data.frame(unique(layer11$unixTime))
+colnames(layer11_cor) <- c('Date')
+layer11_cor <- merge(x = layer11_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer11) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer11_cor[,"Unique_Buyer"] <- NA
+for(date in layer11_cor$Date)
+{
+  ubuyer <- subset(layer11, layer11$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer11_cor$Unique_Buyer[layer11_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer12 <- subset(normal_data, total_token*8.45*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*5.7*10^(-9))
+layer12_cor <- data.frame(unique(layer12$unixTime))
+colnames(layer12_cor) <- c('Date')
+layer12_cor <- merge(x = layer12_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer12) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer12_cor[,"Unique_Buyer"] <- NA
+for(date in layer12_cor$Date)
+{
+  ubuyer <- subset(layer12, layer12$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer12_cor$Unique_Buyer[layer12_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer13 <- subset(normal_data, total_token*9.26*10^(-9) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*8.45*10^(-9))
+layer13_cor <- data.frame(unique(layer13$unixTime))
+colnames(layer13_cor) <- c('Date')
+layer13_cor <- merge(x = layer13_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer13) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer13_cor[,"Unique_Buyer"] <- NA
+for(date in layer13_cor$Date)
+{
+  ubuyer <- subset(layer13, layer13$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer13_cor$Unique_Buyer[layer13_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer14 <- subset(normal_data, total_token*2*10^(-8) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*9.26*10^(-9))
+layer14_cor <- data.frame(unique(layer14$unixTime))
+colnames(layer14_cor) <- c('Date')
+layer14_cor <- merge(x = layer14_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer14) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer14_cor[,"Unique_Buyer"] <- NA
+for(date in layer14_cor$Date)
+{
+  ubuyer <- subset(layer14, layer14$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer14_cor$Unique_Buyer[layer14_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer15 <- subset(normal_data, total_token*9*10^(-8) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*2*10^(-8))
+layer15_cor <- data.frame(unique(layer15$unixTime))
+colnames(layer15_cor) <- c('Date')
+layer15_cor <- merge(x = layer15_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer15) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer15_cor[,"Unique_Buyer"] <- NA
+for(date in layer15_cor$Date)
+{
+  ubuyer <- subset(layer15, layer15$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer15_cor$Unique_Buyer[layer15_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer16 <- subset(normal_data, total_token*4*10^(-7) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*9*10^(-8))
+layer16_cor <- data.frame(unique(layer16$unixTime))
+colnames(layer16_cor) <- c('Date')
+layer16_cor <- merge(x = layer16_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer16) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer16_cor[,"Unique_Buyer"] <- NA
+for(date in layer16_cor$Date)
+{
+  ubuyer <- subset(layer16, layer16$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer16_cor$Unique_Buyer[layer16_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer17 <- subset(normal_data, total_token*1.3*10^(-6) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*4*10^(-7))
+layer17_cor <- data.frame(unique(layer17$unixTime))
+colnames(layer17_cor) <- c('Date')
+layer17_cor <- merge(x = layer17_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer17) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer17_cor[,"Unique_Buyer"] <- NA
+for(date in layer17_cor$Date)
+{
+  ubuyer <- subset(layer17, layer17$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer17_cor$Unique_Buyer[layer17_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer18 <- subset(normal_data, total_token*4*10^(-6) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*1.3*10^(-6))
+layer18_cor <- data.frame(unique(layer18$unixTime))
+colnames(layer18_cor) <- c('Date')
+layer18_cor <- merge(x = layer18_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer18) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer18_cor[,"Unique_Buyer"] <- NA
+for(date in layer18_cor$Date)
+{
+  ubuyer <- subset(layer18, layer18$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer18_cor$Unique_Buyer[layer18_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer19 <- subset(normal_data, total_token*1.5*10^(-5) > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*4*10^(-6))
+layer19_cor <- data.frame(unique(layer19$unixTime))
+colnames(layer19_cor) <- c('Date')
+layer19_cor <- merge(x = layer19_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer19) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer19_cor[,"Unique_Buyer"] <- NA
+for(date in layer19_cor$Date)
+{
+  ubuyer <- subset(layer19, layer19$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer19_cor$Unique_Buyer[layer19_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
+```{r}
+layer20 <- subset(normal_data, total_token*1 > normal_data$tokenAmount &
+                  normal_data$tokenAmount > total_token*1.5*10^(-5))
+layer20_cor <- data.frame(unique(layer20$unixTime))
+colnames(layer20_cor) <- c('Date')
+layer20_cor <- merge(x = layer20_cor, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+colnames(layer20) <- c('Seller', 'Buyer', 'Date', 'tokenAmount')
+layer20_cor[,"Unique_Buyer"] <- NA
+for(date in layer20_cor$Date)
+{
+  ubuyer <- subset(layer20, layer20$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer20_cor$Unique_Buyer[layer20_cor$Date == date] <- nrow(ubuyer)
+}
+```
+
++ Test correlation between unique buyers and token price in each layer
++ I use close price as the token price
++ The method is **pearson**
++ Since some date in TokenPrice is not exist, use cor function will cause NA
+
++ Layer 1
++ Transactions that involve 2.1325 x 10^(-9) × MAXt in amount
++ There are 20,391 transactions in layer 1
+```{r}
+cor1 <- cor.test(layer1_cor$Close, layer1_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor1
+```
+
++ Layer 2
++ Transactions that involve 2.1325x10^(-9) x MAXt ~ 2.1425x10^(-9) × MAXt in amount
++ There are 20,391 transactions in layer 2
+```{r}
+cor2 <- cor.test(layer2_cor$Close, layer2_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor2
+```
+
++ Layer 3
++ Transactions that involve 2.1425x10^(-9) x MAXt ~ 2.21x10^(-9) × MAXt in amount
++ There are 20,740 transactions in layer 3
+```{r}
+cor3 <- cor.test(layer3_cor$Close, layer3_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor3
+```
+
++ Layer 4
++ Transactions that involve 2.82x10^(-9) x MAXt ~ 2.1425x10^(-9) × MAXt in amount
++ There are 13,299 transactions in layer 4
+```{r}
+cor4 <- cor.test(layer4_cor$Close, layer4_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor4
+```
+
++ Layer 5
++ Transactions that involve 2.8275x10^(-9) x MAXt ~ 2.82x10^(-9) × MAXt in amount
++ There are 24,839 transactions in layer 5
+```{r}
+cor5 <- cor.test(layer5_cor$Close, layer5_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor5
+```
+
++ Layer 6
++ Transactions that involve 2.95x10^(-9) x MAXt ~ 2.8275x10^(-9) × MAXt in amount
++ There are 21,171 transactions in layer 6
+```{r}
+cor6 <- cor.test(layer6_cor$Close, layer6_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor6
+```
+
++ Layer 7
++ Transactions that involve 3.025x10^(-9) x MAXt ~ 2.95x10^(-9) × MAXt in amount
++ There are 19,641 transactions in layer 7
+```{r}
+cor7 <- cor.test(layer7_cor$Close, layer7_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor7
+```
+
++ Layer 8
++ Transactions that involve 3.08x10^(-9) x MAXt ~ 3.025x10^(-9) × MAXt in amount
++ There are 20,573 transactions in layer 8
+```{r}
+cor8 <- cor.test(layer8_cor$Close, layer8_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor8
+```
+
++ Layer 9
++ Transactions that involve 3.17x10^(-9) x MAXt ~ 3.08x10^(-9) × MAXt in amount
++ There are 20,784 transactions in layer 9
+```{r}
+cor9 <- cor.test(layer9_cor$Close, layer9_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor9
+```
+
++ Layer 10
++ Transactions that involve 4.1*10^(-9) x MAXt ~ 3.17x10^(-9) × MAXt in amount
++ There are 21,633 transactions in layer 10
+```{r}
+cor10 <- cor.test(layer10_cor$Close, layer10_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor10
+```
+
++ Layer 11
++ Transactions that involve 5.7x10^(-9) x MAXt ~ 4.1*10^(-9) × MAXt in amount
++ There are 20,367 transactions in layer 11
+```{r}
+cor11 <- cor.test(layer11_cor$Close, layer11_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor11
+```
+
++ Layer 12
++ Transactions that involve 8.45x10^(-9)x MAXt ~ 5.7x10^(-9) × MAXt in amount
++ There are 20,792 transactions in layer 12
+```{r}
+cor12 <- cor.test(layer12_cor$Close, layer12_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor12
+```
+
++ Layer 13
++ Transactions that involve 9.26x10^(-9) x MAXt ~ 8.45x10^(-9) × MAXt in amount
++ There are 23,697 transactions in layer 13
+```{r}
+cor13 <- cor.test(layer13_cor$Close, layer13_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor13
+```
+
++ Layer 14
++ Transactions that involve 2*10^(-8) x MAXt ~ 9.26x10^(-9) × MAXt in amount
++ There are 19,166 transactions in layer 14
+```{r}
+cor14 <- cor.test(layer14_cor$Close, layer14_cor$Unique_Buyer, method = c("pearson"))
+cor14
+```
+
++ Layer 15
++ Transactions that involve 9x10^(-8) x MAXt ~ 2x10^(-8) × MAXt in amount
++ There are 19,495 transactions in layer 15
+```{r}
+cor15 <- cor.test(layer15_cor$Close, layer15_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor15
+```
+
++ Layer 16
++ Transactions that involve 4x10^(-7) x MAXt ~ 9x10^(-8) × MAXt in amount
++ There are 19,027 transactions in layer 16
+```{r}
+cor16 <- cor.test(layer16_cor$Close, layer16_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor16
+```
+
++ Layer 17
++ Transactions that involve 1.3x10^(-6) x MAXt ~ 4x10^(-7) × MAXt in amount
++ There are 20,781 transactions in layer 17
+```{r}
+cor17 <- cor.test(layer17_cor$Close, layer17_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor17
+```
+
++ Layer 18
++ Transactions that involve 4x10^(-6) x MAXt ~ 1.3x10^(-6) × MAXt in amount
++ There are 22,865 transactions in layer 18
+```{r}
+cor18 <- cor.test(layer18_cor$Close, layer18_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor18
+```
+
++ Layer 19
++ Transactions that involve 1.5*10^(-5) x MAXt ~ 4x10^(-6) × MAXt in amount
++ There are 21,975 transactions in layer 19
+```{r}
+cor19 <- cor.test(layer19_cor$Close, layer19_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor19
+```
+
++ Layer 20
++ Transactions that involve more than 1.5*10^(-5) x MAXt in amount
++ There are 14,814 transactions in layer 20
+```{r}
+cor20 <- cor.test(layer20_cor$Close, layer20_cor$Unique_Buyer, method = c("pearson"))$estimate
+cor20
+cor20[['cor']]
+```
+
++ Here is the summary of the correlation in each layer
++ There are 5 layer which correlation is a negative number
++ However there are 6 layer which have a correlation greater than 0.4
+```{r}
+cor_result <- c(cor1[['cor']], cor2[['cor']], cor3[['cor']], cor3[['cor']], cor4[['cor']], cor5[['cor']], cor6[['cor']], cor7[['cor']], cor8[['cor']], cor9[['cor']], cor10[['cor']], cor11[['cor']], cor12[['cor']], cor13[['cor']], cor14[['cor']], cor15[['cor']], cor16[['cor']], cor17[['cor']], cor18[['cor']], cor19['cor'], cor20[['cor']])
+summary(cor_result)
+```
+
+# Project 2
+## Question 1:
+### Select the layers which have the max/min correlation: layer2 and layer6
+```{r}
+layer2_date <- data.frame(unique(layer2$Date))
+colnames(layer2_date) <- c('Date')
+layer2_reg <- merge(x = layer2_date, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+
+layer6_date <- data.frame(unique(layer6$Date))
+colnames(layer6_date) <- c('Date')
+layer6_reg <- merge(x = layer6_date, y = price[, c("Date", "Close")], by = "Date", all.x = TRUE)
+```
+
+### Feature 1: Unique buyers
+#### Layer2
+```{r}
+layer2_reg[,"Unique_Buyer"] <- NA
+for(date in layer2_reg$Date)
+{
+  ubuyer <- subset(layer2, layer2$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer2_reg$Unique_Buyer[layer2_reg$Date == date] <- nrow(ubuyer)
+}
+```
+
+#### Layer6
+```{r}
+layer6_reg[,"Unique_Buyer"] <- NA
+for(date in layer6_reg$Date)
+{
+  ubuyer <- subset(layer6, layer6$Date == date)
+  ubuyer <- count(unique(ubuyer$Buyer))
+  layer6_reg$Unique_Buyer[layer6_reg$Date == date] <- nrow(ubuyer)
+}
+```
+
+### Feature 2: Terms of numbers (x1=number of transactions)
+#### Layer2
+```{r}
+layer2_reg[,"transactions"] <- NA
+for(date in layer2_reg$Date)
+{
+  trans <- subset(layer2, layer2$Date == date)
+  layer2_reg$transactions[layer2_reg$Date == date] <- nrow(trans)
+}
+```
+
+#### Layer6
+```{r}
+layer6_reg[,"transactions"] <- NA
+for(date in layer6_reg$Date)
+{
+  trans <- subset(layer6, layer6$Date == date)
+  layer6_reg$transactions[layer6_reg$Date == date] <- nrow(trans)
+}
+```
+
+### Feature 3: square of transactions (x1=square root of number of transactions)
+#### Layer2
+```{r}
+layer2_reg[,"sqr_transactions"] <- NA
+for(date in layer2_reg$Date)
+{
+  trans <- subset(layer2, layer2$Date == date)
+  trans <- nrow(trans)
+  layer2_reg$sqr_transactions[layer2_reg$Date == date] <- trans*trans
+}
+```
+
+#### Layer6
+```{r}
+layer6_reg[,"sqr_transactions"] <- NA
+for(date in layer6_reg$Date)
+{
+  trans <- subset(layer6, layer6$Date == date)
+  trans <- nrow(trans)
+  layer6_reg$sqr_transactions[layer6_reg$Date == date] <- trans*trans
+}
+```
+
+### Feature 4: percentages (x1=percentage of investors who bought more than 10 tokens)
+#### Layer2
+```{r}
+layer2_reg[,"percentage"] <- NA
+for(date in layer2_reg$Date)
+{
+  trans <- subset(layer2, layer2$Date == date)
+  gre10 <- count(trans$Buyer)
+  gre10 <- subset(gre10, gre10$freq > 10)
+  perc <- nrow(gre10) / nrow(trans)
+  layer2_reg$percentage[layer2_reg$Date == date] <- perc
+}
+```
+
+#### Layer6
+```{r}
+layer6_reg[,"percentage"] <- NA
+for(date in layer6_reg$Date)
+{
+  trans <- subset(layer6, layer6$Date == date)
+  gre10 <- count(trans$Buyer)
+  gre10 <- subset(gre10, gre10$freq > 10)
+  perc <- nrow(gre10) / nrow(trans)
+  layer6_reg$percentage[layer6_reg$Date == date] <- perc
+}
+```
+
+## Building multiple regression model
+#### Layer2
+I found if the features includes square of transactions, the Std. Error is much larger than not included it.
+```{r}
+model.layer2 <- lm(Close ~ (Unique_Buyer + transactions + percentage), data = layer2_reg)
+model.layer2$coefficients
+```
+#### Summary
+```{r}
+summary(model.layer2)$coefficients
+#model.layer2$fitted.values
+```
+The Std. Error of percentage is higher that the other two features
+Trying to take out the percentage features
+```{r}
+model.layer2 <- lm(Close ~ (Unique_Buyer + transactions), data = layer2_reg)
+model.layer2$coefficients
+```
+#### Summary
+```{r}
+summary(model.layer2)$coefficients
+#model.layer2$fitted.values
+```
+Much better
+
+#### Layer6
+```{r}
+model.layer6 <- lm(Close ~ (Unique_Buyer + transactions + percentage), data = layer6_reg)
+model.layer6$coefficients
+```
+
+#### Summary
+```{r}
+summary(model.layer6)$coefficients
+#model.layer6$fitted.values
+```
+
+Similar situation to layer2
+```{r}
+model.layer6 <- lm(Close ~ (Unique_Buyer + transactions), data = layer6_reg)
+model.layer6$coefficients
+```
+
+#### Summary
+```{r}
+summary(model.layer6)$coefficients
+#model.layer6$fitted.values
+```
+
+## Conclusion
+No matter the data has higher correlation to unique buyer or not,
+the multiple regression has the lower Std. Error if the features contain Unique_Buyer and transactions
