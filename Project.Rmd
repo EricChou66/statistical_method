@@ -937,53 +937,74 @@ for(date in layer6_reg$Date)
 
 ## Building multiple regression model
 #### Layer2
-I found if the features includes square of transactions, the Std. Error is much larger than not included it.
+If I multiple all four features: Unique Buyer, transactions, square of transactions, and percentage, I can get a high R-squared value
 ```{r}
-model.layer2 <- lm(Close ~ (Unique_Buyer + transactions + percentage), data = layer2_reg)
-model.layer2$coefficients
+model.layer2 <- lm(Close ~ (Unique_Buyer * transactions  * sqr_transactions * percentage), data = layer2_reg)
+#model.layer2$coefficients
 ```
-#### Summary
-```{r}
-summary(model.layer2)$coefficients
-#model.layer2$fitted.values
-```
-The Std. Error of percentage is higher that the other two features
-Trying to take out the percentage features
-```{r}
-model.layer2 <- lm(Close ~ (Unique_Buyer + transactions), data = layer2_reg)
-model.layer2$coefficients
-```
-#### Summary
+#### Coefficients
 ```{r}
 summary(model.layer2)$coefficients
-#model.layer2$fitted.values
+#summary(model.layer2)$residuals
 ```
-Much better
+
+#### R-squared and Adj-R-squared
+```{r}
+summary(model.layer2)$r.squared
+summary(model.layer2)$adj.r.squared
+```
+
+Trying to add all features
+```{r}
+model.layer2 <- lm(Close ~ (Unique_Buyer + transactions  + sqr_transactions + percentage), data = layer2_reg)
+```
+
+#### Coefficients
+```{r}
+summary(model.layer2)$coefficients
+```
+
+#### R-squared and Adj-R-squared
+```{r}
+summary(model.layer2)$r.squared
+summary(model.layer2)$adj.r.squared
+```
 
 #### Layer6
 ```{r}
-model.layer6 <- lm(Close ~ (Unique_Buyer + transactions + percentage), data = layer6_reg)
-model.layer6$coefficients
+model.layer6 <- lm(Close ~ (Unique_Buyer * percentage * transactions * sqr_transactions ), data = layer6_reg)
 ```
 
-#### Summary
+#### Coefficients
 ```{r}
 summary(model.layer6)$coefficients
-#model.layer6$fitted.values
+```
+
+#### R-squared and Adj-R-squared
+```{r}
+summary(model.layer6)$r.squared
+summary(model.layer6)$adj.r.squared
 ```
 
 Similar situation to layer2
 ```{r}
-model.layer6 <- lm(Close ~ (Unique_Buyer + transactions), data = layer6_reg)
+model.layer6 <- lm(Close ~ (Unique_Buyer  + transactions + sqr_transactions + percentage), data = layer6_reg)
 model.layer6$coefficients
 ```
 
-#### Summary
+#### Coefficients
 ```{r}
 summary(model.layer6)$coefficients
-#model.layer6$fitted.values
+```
+
+#### R-squared and Adj-R-squared
+```{r}
+summary(model.layer6)$r.squared
+summary(model.layer6)$adj.r.squared
 ```
 
 ## Conclusion
 No matter the data has higher correlation to unique buyer or not,
-the multiple regression has the lower Std. Error if the features contain Unique_Buyer and transactions
+the multiple regression has the higher R-squared value if the multiply all features (Unique_Buyer, transactions, sqr_transactions, and percentage) together.
+Though the higher of R-squared value isn't guarantee that the model has good fit.
+The only way to verify to perdict and let the time to prove the correctness of the model.
